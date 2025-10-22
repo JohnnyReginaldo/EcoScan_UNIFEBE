@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">EcoScan</string>
+    <string name="instrucao_inicial">Tire uma foto ou escolha da galeria para identificar o descarte correto.</string>
+    <string name="botao_camera">Tirar Foto</string>
+    <string name="botao_galeria">Escolher da Galeria</string>
+    <string name="titulo_resultado">Resultado da Análise:</string>
+</resources>

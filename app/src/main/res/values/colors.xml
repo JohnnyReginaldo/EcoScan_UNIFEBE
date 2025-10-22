@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Nossas cores personalizadas para o App -->
+    <color name="verde_principal">#2E7D32</color>
+    <color name="verde_escuro">#1B5E20</color>
+    <color name="verde_claro">#A5D6A7</color>
+    <color name="fundo_app">#F1F8E9</color>
+    <color name="cinza_texto">#424242</color>
+</resources>
