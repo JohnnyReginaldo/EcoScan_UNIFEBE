@@ -3,6 +3,7 @@ package com.example.ecoscan; // Mude "com.example.ecoscan" se o seu pacote for d
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -12,7 +13,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.util.Log;
-import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -23,11 +23,21 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.support.common.FileUtil;
+import org.tensorflow.lite.support.common.ops.NormalizeOp;
+import org.tensorflow.lite.support.image.ImageProcessor;
 import org.tensorflow.lite.support.image.TensorImage;
-import org.tensorflow.lite.task.vision.detector.Detection;
-import org.tensorflow.lite.task.vision.detector.ObjectDetector;
+import org.tensorflow.lite.support.image.ops.ResizeOp;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -35,91 +45,163 @@ public class MainActivity extends AppCompatActivity {
 
     // Constantes
     private static final String TAG = "EcoScanApp";
-    private static final String MODEL_FILE = "yolov8.tflite"; // Nome do seu modelo TFLite
-    private static final float CONFIDENCE_THRESHOLD = 0.5f; // Limite de confiança (50%)
+    private static final String MODEL_FILE = "best.tflite";
+    private static final String LABEL_FILE = "labels.txt";
+    private static final float CONFIDENCE_THRESHOLD = 0.2f;
+    private static final int INPUT_SIZE = 640;
 
     // Componentes da Tela
     private ImageView imageView;
     private Button buttonCamera;
     private Button buttonGallery;
+    private Button buttonAnalyze;
     private TextView textViewResult;
 
-    // Detector de Objetos do TensorFlow Lite
-    private ObjectDetector objectDetector;
+    // TensorFlow Lite
+    private Interpreter interpreter;
+    private List<String> labels = new ArrayList<>();
+    private int inputWidth;
+    private int inputHeight;
+    private int outputNumClasses;
+    private int outputNumProposals;
 
-    // Activity Result Launchers (a forma moderna de lidar com resultados de intents)
+    // Processador de Imagem
+    private ImageProcessor imageProcessor;
+
+    // Launchers
     private ActivityResultLauncher<Intent> cameraLauncher;
-    private ActivityResultLauncher<String> galleryLauncher;
+    private ActivityResultLauncher<Intent> galleryLauncher;
     private ActivityResultLauncher<String> permissionLauncher;
+
+    private Bitmap bitmapToAnalyze;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Inicializa os componentes da tela
         imageView = findViewById(R.id.imageView);
         buttonCamera = findViewById(R.id.buttonCamera);
         buttonGallery = findViewById(R.id.buttonGallery);
+        buttonAnalyze = findViewById(R.id.buttonAnalyze);
         textViewResult = findViewById(R.id.textViewResult);
 
-        // Configura o detector de objetos
-        setupObjectDetector();
+        // Assim que o app abrir, você verá o texto vermelho "[TESTE] Aguardando análise..."
+        // que definimos no XML.
 
-        // Configura os launchers
         setupLaunchers();
 
-        // Configura os cliques dos botões
+        try {
+            loadLabels();
+            loadModel();
+            setupImageProcessor();
+            Log.d(TAG, "TensorFlow Lite inicializado com sucesso.");
+        } catch (IOException e) {
+            Log.e(TAG, "Falha ao inicializar o TensorFlow Lite.", e);
+            Toast.makeText(this, "Não foi possível carregar o modelo ou labels. Verifique assets.", Toast.LENGTH_LONG).show();
+            textViewResult.setText("FALHA AO CARREGAR MODELO. Verifique o Logcat."); // Mostra erro
+        }
+
         buttonCamera.setOnClickListener(v -> checkCameraPermissionAndOpenCamera());
         buttonGallery.setOnClickListener(v -> openGallery());
+
+        buttonAnalyze.setOnClickListener(v -> analyzeImage());
+        buttonAnalyze.setEnabled(false);
     }
 
-    private void setupObjectDetector() {
-        try {
-            // Configurações do detector
-            ObjectDetector.ObjectDetectorOptions options = ObjectDetector.ObjectDetectorOptions.builder()
-                    .setMaxResults(1) // Queremos apenas o resultado mais provável
-                    .setScoreThreshold(CONFIDENCE_THRESHOLD)
-                    .build();
-
-            // Cria o detector a partir do modelo nos assets
-            objectDetector = ObjectDetector.createFromFileAndOptions(this, MODEL_FILE, options);
-
-        } catch (IOException e) {
-            Log.e(TAG, "Erro ao inicializar o modelo TFLite.", e);
-            Toast.makeText(this, "Não foi possível carregar o modelo.", Toast.LENGTH_SHORT).show();
+    private void analyzeImage() {
+        if (bitmapToAnalyze != null) {
+            // ##### MUDANÇA 1: AVISA QUE ESTÁ ANALISANDO #####
+            textViewResult.setText("Analisando...");
+            Log.d(TAG, "Iniciando detecção...");
+            detectObjects(bitmapToAnalyze);
+        } else {
+            Toast.makeText(this, "Selecione uma imagem da câmera ou galeria primeiro.", Toast.LENGTH_SHORT).show();
+            textViewResult.setText("Nenhuma imagem selecionada para análise.");
         }
     }
 
+    private void loadLabels() throws IOException {
+        AssetManager assetManager = getAssets();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(assetManager.open(LABEL_FILE)));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            labels.add(line);
+        }
+        reader.close();
+        Log.d(TAG, "Labels carregados: " + labels.size());
+        Log.d(TAG, "Labels: " + labels.toString());
+    }
+
+    private void loadModel() throws IOException {
+        MappedByteBuffer tfliteModel = FileUtil.loadMappedFile(this, MODEL_FILE);
+        Interpreter.Options options = new Interpreter.Options();
+        options.setNumThreads(4);
+        interpreter = new Interpreter(tfliteModel, options);
+
+        int[] inputShape = interpreter.getInputTensor(0).shape();
+        inputWidth = inputShape[1];
+        inputHeight = inputShape[2];
+
+        int[] outputShape = interpreter.getOutputTensor(0).shape();
+        outputNumClasses = outputShape[1] - 4;
+        outputNumProposals = outputShape[2];
+
+        Log.d(TAG, "Modelo carregado. Entrada: " + inputWidth + "x" + inputHeight);
+        Log.d(TAG, "Saída: Classes=" + outputNumClasses + ", Propostas=" + outputNumProposals);
+
+        if (outputNumClasses != labels.size()) {
+            String errorMsg = "Erro: Modelo espera " + outputNumClasses + " classes, mas " + LABEL_FILE + " tem " + labels.size() + " classes.";
+            Log.e(TAG, errorMsg);
+            Toast.makeText(this, "Erro: Incompatibilidade entre modelo e labels.txt", Toast.LENGTH_LONG).show();
+            textViewResult.setText(errorMsg); // Mostra erro
+        }
+    }
+
+    private void setupImageProcessor() {
+        imageProcessor = new ImageProcessor.Builder()
+                .add(new ResizeOp(inputHeight, inputWidth, ResizeOp.ResizeMethod.BILINEAR))
+                .add(new NormalizeOp(0f, 255f))
+                .build();
+    }
+
     private void setupLaunchers() {
-        // Launcher para permissão de câmera
         permissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-            if (isGranted) {
-                openCamera();
-            } else {
-                Toast.makeText(this, "Permissão da câmera negada.", Toast.LENGTH_SHORT).show();
-            }
+            if (isGranted) openCamera();
+            else Toast.makeText(this, "Permissão da câmera negada.", Toast.LENGTH_SHORT).show();
         });
 
-        // Launcher para a câmera
         cameraLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                 Bundle extras = result.getData().getExtras();
-                Bitmap imageBitmap = (Bitmap) extras.get("data");
-                if (imageBitmap != null) {
-                    detectObjects(imageBitmap);
+                if (extras != null) {
+                    Bitmap imageBitmap = (Bitmap) extras.get("data");
+                    if (imageBitmap != null) {
+                        bitmapToAnalyze = imageBitmap;
+                        imageView.setImageBitmap(bitmapToAnalyze);
+                        // ##### MUDANÇA 2: AVISA QUE IMAGEM ESTÁ PRONTA #####
+                        textViewResult.setText("Imagem carregada. Clique em 'Analisar'.");
+                        buttonAnalyze.setEnabled(true);
+                    }
                 }
             }
         });
 
-        // Launcher para a galeria
-        galleryLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
-            if (uri != null) {
-                try {
-                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
-                    detectObjects(bitmap);
-                } catch (IOException e) {
-                    Log.e(TAG, "Erro ao carregar imagem da galeria.", e);
+        galleryLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                Uri imageUri = result.getData().getData();
+                if (imageUri != null) {
+                    try {
+                        Bitmap bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), imageUri);
+                        bitmapToAnalyze = bitmap;
+                        imageView.setImageBitmap(bitmapToAnalyze);
+                        // ##### MUDANÇA 3: AVISA QUE IMAGEM ESTÁ PRONTA #####
+                        textViewResult.setText("Imagem carregada. Clique em 'Analisar'.");
+                        buttonAnalyze.setEnabled(true);
+                    } catch (IOException e) {
+                        Log.e(TAG, "Erro ao carregar imagem da galeria.", e);
+                        textViewResult.setText("Erro ao carregar imagem da galeria.");
+                    }
                 }
             }
         });
@@ -139,77 +221,221 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openGallery() {
-        galleryLauncher.launch("image/*");
+        Intent pickIntent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        galleryLauncher.launch(pickIntent);
     }
 
     private void detectObjects(Bitmap bitmap) {
-        if (objectDetector == null) {
-            Toast.makeText(this, "Detector não foi inicializado.", Toast.LENGTH_SHORT).show();
+        if (interpreter == null || labels.isEmpty()) {
+            String errorMsg = "Detector não foi inicializado. Verifique o Logcat.";
+            Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show();
+            Log.e(TAG, errorMsg + " Verifique se o modelo e labels foram carregados.");
+            textViewResult.setText(errorMsg); // Mostra erro
             return;
         }
 
-        // Converte o Bitmap para o formato que o TFLite entende
         TensorImage tensorImage = TensorImage.fromBitmap(bitmap);
+        tensorImage = imageProcessor.process(tensorImage);
+        ByteBuffer inputBuffer = tensorImage.getBuffer();
 
-        // Roda a detecção
-        List<Detection> results = objectDetector.detect(tensorImage);
+        float[][][] outputArray = new float[1][4 + outputNumClasses][outputNumProposals];
 
-        // Processa e exibe os resultados
-        displayDetectionResult(results, bitmap);
+        Log.d(TAG, "Rodando o modelo...");
+        try {
+            interpreter.run(inputBuffer, outputArray);
+            Log.d(TAG, "Modelo executado com sucesso.");
+        } catch (Exception e) {
+            Log.e(TAG, "Erro na execução do modelo TFLite.", e);
+            Toast.makeText(this, "Erro na execução do modelo. Formato de entrada/saída incorreto.", Toast.LENGTH_LONG).show();
+            // ##### MUDANÇA 4: MOSTRA ERRO DE EXECUÇÃO NA TELA #####
+            textViewResult.setText("Erro ao executar modelo: " + e.getMessage());
+            return;
+        }
+
+        List<Detection> detections = postProcessYolo(outputArray[0], bitmap.getWidth(), bitmap.getHeight());
+
+        Log.d(TAG, "Detecções pós-processadas: " + detections.size());
+        displayDetectionResult(detections, bitmap);
     }
 
+    // Classe interna para guardar uma detecção
+    private static class Detection {
+        RectF boundingBox;
+        String label;
+        float confidence;
+
+        Detection(RectF boundingBox, String label, float confidence) {
+            this.boundingBox = boundingBox;
+            this.label = label;
+            this.confidence = confidence;
+        }
+    }
+
+    private List<Detection> postProcessYolo(float[][] output, int originalWidth, int originalHeight) {
+        float[][] transposedOutput = new float[outputNumProposals][4 + outputNumClasses];
+        for (int i = 0; i < 4 + outputNumClasses; i++) {
+            for (int j = 0; j < outputNumProposals; j++) {
+                transposedOutput[j][i] = output[i][j];
+            }
+        }
+
+        List<Detection> allDetections = new ArrayList<>();
+
+        for (int i = 0; i < outputNumProposals; i++) {
+            float[] proposal = transposedOutput[i];
+
+            int bestClassIndex = -1;
+            float maxScore = 0.0f;
+            for (int j = 4; j < 4 + outputNumClasses; j++) {
+                if (proposal[j] > maxScore) {
+                    maxScore = proposal[j];
+                    bestClassIndex = j - 4;
+                }
+            }
+
+            if (maxScore > CONFIDENCE_THRESHOLD) {
+                float cx = proposal[0];
+                float cy = proposal[1];
+                float w = proposal[2];
+                float h = proposal[3];
+
+                float left = cx - (w / 2f);
+                float top = cy - (h / 2f);
+                float right = cx + (w / 2f);
+                float bottom = cy + (h / 2f);
+
+                String label = (bestClassIndex >= 0 && bestClassIndex < labels.size()) ? labels.get(bestClassIndex) : "Desconhecido";
+
+                RectF boundingBox = new RectF(left / INPUT_SIZE, top / INPUT_SIZE, right / INPUT_SIZE, bottom / INPUT_SIZE);
+                allDetections.add(new Detection(boundingBox, label, maxScore));
+            }
+        }
+
+        return nonMaxSuppression(allDetections);
+    }
+
+    private List<Detection> nonMaxSuppression(List<Detection> allDetections) {
+        List<Detection> nmsList = new ArrayList<>();
+        float IOU_THRESHOLD = 0.45f;
+
+        allDetections.sort(Comparator.comparingDouble((Detection d) -> d.confidence).reversed());
+
+        for (Detection detection : allDetections) {
+            boolean keep = true;
+            for (Detection nmsDetection : nmsList) {
+                float iou = calculateIoU(detection.boundingBox, nmsDetection.boundingBox);
+                if (iou > IOU_THRESHOLD) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                nmsList.add(detection);
+            }
+        }
+        return nmsList;
+    }
+
+    private float calculateIoU(RectF boxA, RectF boxB) {
+        float xA = Math.max(boxA.left, boxB.left);
+        float yA = Math.max(boxA.top, boxB.top);
+        float xB = Math.min(boxA.right, boxB.right);
+        float yB = Math.min(boxA.bottom, boxB.bottom);
+
+        float interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
+        float boxAArea = (boxA.right - boxA.left) * (boxA.bottom - boxA.top);
+        float boxBArea = (boxB.right - boxB.left) * (boxB.bottom - boxB.top);
+        float unionArea = (boxAArea + boxBArea - interArea);
+
+        return interArea / unionArea;
+    }
+
+
     private void displayDetectionResult(List<Detection> detections, Bitmap originalBitmap) {
-        if (detections == null || detections.isEmpty()) {
+        Bitmap mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true);
+        Canvas canvas = new Canvas(mutableBitmap);
+        Paint paint = new Paint();
+        paint.setColor(Color.parseColor("#4CAF50")); // Verde EcoScan
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(mutableBitmap.getWidth(), mutableBitmap.getHeight()) / 100f);
+        paint.setTextSize(Math.max(mutableBitmap.getWidth(), mutableBitmap.getHeight()) / 25f);
+        paint.setColor(Color.RED);
+        paint.setStyle(Paint.Style.FILL_AND_STROKE);
+
+        if (detections.isEmpty()) {
+            // ##### MUDANÇA 5: AVISA QUE NADA FOI ACHADO #####
+            Log.w(TAG, "Nenhuma detecção válida encontrada (acima do threshold).");
             textViewResult.setText("Nenhum objeto reconhecido.\nTente uma foto com melhor iluminação ou enquadramento.");
-            imageView.setImageBitmap(originalBitmap);
+            imageView.setImageBitmap(originalBitmap); // Mostra a original se nada for achado
             return;
         }
 
-        // Pega a detecção com maior probabilidade (já que configuramos maxResults=1)
         Detection bestDetection = detections.get(0);
-        String label = bestDetection.getCategories().get(0).getLabel();
-        float confidence = bestDetection.getCategories().get(0).getScore();
+        String label = bestDetection.label;
+        float confidence = bestDetection.confidence;
         String disposalInfo = getDisposalInfo(label);
 
-        // Formata o texto do resultado
         String resultText = String.format(Locale.getDefault(),
                 "Objeto: %s\nCerteza: %.1f%%\nDescarte: %s",
                 label,
                 confidence * 100,
                 disposalInfo);
+
+        // ##### MUDANÇA 6: EXIBE O RESULTADO FINAL #####
+        // O texto continuará vermelho, como definido no XML.
         textViewResult.setText(resultText);
+        Log.i(TAG, "Resultado exibido: " + resultText);
 
         // Desenha a caixa de detecção na imagem
-        Bitmap mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true);
-        Canvas canvas = new Canvas(mutableBitmap);
-        Paint paint = new Paint();
-        paint.setColor(Color.GREEN);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(5.0f);
+        RectF scaledBox = new RectF(
+                bestDetection.boundingBox.left * originalBitmap.getWidth(),
+                bestDetection.boundingBox.top * originalBitmap.getHeight(),
+                bestDetection.boundingBox.right * originalBitmap.getWidth(),
+                bestDetection.boundingBox.bottom * originalBitmap.getHeight()
+        );
 
-        canvas.drawRect(bestDetection.getBoundingBox(), paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setColor(Color.parseColor("#4CAF50"));
+        canvas.drawRect(scaledBox, paint);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.parseColor("#4CAF50"));
+        canvas.drawText(
+                String.format(Locale.getDefault(), "%s (%.1f%%)", label, confidence * 100),
+                scaledBox.left + 10,
+                scaledBox.top - 10,
+                paint
+        );
+
         imageView.setImageBitmap(mutableBitmap);
     }
 
-    // AQUI VOCÊ DEVE PERSONALIZAR COM SUAS CLASSES E INSTRUÇÕES DE DESCARTE
+    // RELEMBRANDO: Este método foi corrigido na última versão e deve estar correto
+    // com o seu labels.txt
     private String getDisposalInfo(String label) {
-        switch (label.toLowerCase()) {
-            case "garrafa pet":
-            case "plastico":
-                return "Lixo reciclável - PLÁSTICO (Amarelo)";
-            case "papel":
-            case "papelao":
+        switch (label.toLowerCase(Locale.ROOT)) {
+            case "plastic":
+                return "Lixo reciclável - PLÁSTICO (Vermelho)";
+            case "paper":
                 return "Lixo reciclável - PAPEL (Azul)";
-            case "lata":
+            case "cardboard":
+                return "Lixo reciclável - PAPELÃO (Azul)";
             case "metal":
                 return "Lixo reciclável - METAL (Amarelo)";
-            case "vidro":
+            case "glass":
                 return "Lixo reciclável - VIDRO (Verde)";
-            case "organico":
-                return "Lixo orgânico / Compostagem";
+            case "biodegradable":
+                return "Lixo orgânico / Compostagem (Marrom)";
             default:
-                return "Lixo comum / Não reciclável";
+                return "Lixo comum / Não reciclável.";
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (interpreter != null) {
+            interpreter.close();
         }
     }
 }
-

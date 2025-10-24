@@ -4,4 +4,6 @@
     <string name="botao_camera">Tirar Foto</string>
     <string name="botao_galeria">Escolher da Galeria</string>
     <string name="titulo_resultado">Resultado da Análise:</string>
+
+    <string name="botao_analisar">Analisar Imagem</string>
 </resources>
