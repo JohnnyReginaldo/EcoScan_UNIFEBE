@@ -9,6 +9,4 @@
     <color name="fundo_app">#F1F8E9</color>
     <color name="cinza_texto">#424242</color>
 
-    <color name="vermelho_debug">#D32F2F</color>
-
-</resources>
+    <color name="lixeira_vermelho">#D32F2F</color> <color name="lixeira_azul">#1976D2</color> <color name="lixeira_amarelo">#FBC02D</color> <color name="lixeira_verde">#388E3C</color> <color name="lixeira_marrom">#5D4037</color> <color name="lixeira_cinza">#616161</color> </resources>
