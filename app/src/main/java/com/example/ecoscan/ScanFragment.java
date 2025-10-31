@@ -1,28 +1,27 @@
 package com.example.ecoscan;
 
-// Imports necessários para Fragment
-import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.fragment.app.Fragment;
-
-// Imports que você já tinha (copiados da sua MainActivity)
 import android.Manifest;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ImageDecoder; // Importante
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -30,8 +29,12 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import androidx.fragment.app.Fragment;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.support.common.FileUtil;
@@ -41,20 +44,21 @@ import org.tensorflow.lite.support.image.TensorImage;
 import org.tensorflow.lite.support.image.ops.ResizeOp;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-// Mudança: Agora estende Fragment, não AppCompatActivity
 public class ScanFragment extends Fragment {
 
-    // --- Suas variáveis (exatamente como eram) ---
     private static final String TAG = "EcoScanApp";
     private static final String MODEL_FILE = "best.tflite";
     private static final String LABEL_FILE = "labels.txt";
@@ -82,6 +86,7 @@ public class ScanFragment extends Fragment {
     private ActivityResultLauncher<String> permissionLauncher;
 
     private Bitmap bitmapToAnalyze;
+    private Uri cameraImageUri;
 
     // Classe interna (exatamente como era)
     private static class DisposalDetails {
@@ -103,20 +108,14 @@ public class ScanFragment extends Fragment {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Inicializa os Launchers AQUI, no onCreate do Fragment
         setupLaunchers();
-
-        // Tenta carregar o modelo e labels
         try {
-            // Usa requireContext() para obter o contexto
             loadLabels();
             loadModel();
             setupImageProcessor();
             Log.d(TAG, "TensorFlow Lite inicializado com sucesso.");
         } catch (IOException e) {
             Log.e(TAG, "Falha ao inicializar o TensorFlow Lite.", e);
-            // Mostra um Toast (precisa de contexto)
             Toast.makeText(requireContext(), "Não foi possível carregar o modelo ou labels.", Toast.LENGTH_LONG).show();
         }
     }
@@ -124,26 +123,18 @@ public class ScanFragment extends Fragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // Infla o layout (fragment_scan.xml)
         return inflater.inflate(R.layout.fragment_scan, container, false);
     }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
-        // --- Lógica do seu antigo onCreate() vai aqui ---
-
-        // Encontra os componentes USANDO A "view" DO FRAGMENT
         imageView = view.findViewById(R.id.imageView);
         buttonCamera = view.findViewById(R.id.buttonCamera);
         buttonGallery = view.findViewById(R.id.buttonGallery);
         buttonAnalyze = view.findViewById(R.id.buttonAnalyze);
         textViewResult = view.findViewById(R.id.textViewResult);
-
         textViewResult.setText("");
-
-        // Configura os cliques dos botões
         buttonCamera.setOnClickListener(v -> checkCameraPermissionAndOpenCamera());
         buttonGallery.setOnClickListener(v -> openGallery());
         buttonAnalyze.setOnClickListener(v -> analyzeImage());
@@ -156,6 +147,7 @@ public class ScanFragment extends Fragment {
         if (bitmapToAnalyze != null) {
             textViewResult.setText("Analisando...");
             Log.d(TAG, "Iniciando detecção...");
+            imageView.setImageBitmap(bitmapToAnalyze);
             detectObjects(bitmapToAnalyze);
         } else {
             Toast.makeText(requireContext(), "Selecione uma imagem da câmera ou galeria primeiro.", Toast.LENGTH_SHORT).show();
@@ -164,7 +156,6 @@ public class ScanFragment extends Fragment {
     }
 
     private void loadLabels() throws IOException {
-        // Precisa do contexto para getAssets()
         AssetManager assetManager = requireContext().getAssets();
         BufferedReader reader = new BufferedReader(new InputStreamReader(assetManager.open(LABEL_FILE)));
         String line;
@@ -175,16 +166,13 @@ public class ScanFragment extends Fragment {
     }
 
     private void loadModel() throws IOException {
-        // Precisa do contexto para loadMappedFile
         MappedByteBuffer tfliteModel = FileUtil.loadMappedFile(requireContext(), MODEL_FILE);
         Interpreter.Options options = new Interpreter.Options();
         options.setNumThreads(4);
         interpreter = new Interpreter(tfliteModel, options);
-
         int[] inputShape = interpreter.getInputTensor(0).shape();
         inputWidth = inputShape[1];
         inputHeight = inputShape[2];
-
         int[] outputShape = interpreter.getOutputTensor(0).shape();
         outputNumClasses = outputShape[1] - 4;
         outputNumProposals = outputShape[2];
@@ -197,7 +185,40 @@ public class ScanFragment extends Fragment {
                 .build();
     }
 
-    // Adaptação dos Launchers para Fragment
+    // --- MODIFICADO: Carregamento de Imagem em Alta Resolução ---
+
+    /**
+     * Carrega um Bitmap de uma Uri.
+     * *** CORRIGIDO PARA EVITAR CRASH DE HARDWARE BITMAP ***
+     */
+    private Bitmap loadBitmapFromUri(Uri uri) throws IOException {
+        ContentResolver resolver = requireContext().getContentResolver();
+        ImageDecoder.Source source = ImageDecoder.createSource(resolver, uri);
+
+        // Esta é a correção:
+        return ImageDecoder.decodeBitmap(source, (decoder, info, s) -> {
+            // Força o bitmap a ser alocado na memória de "software" (RAM)
+            // Isso impede o crash do TFLite e do Canvas.
+            decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+
+            // Pede que o bitmap seja mutável (bom para desenhar)
+            decoder.setMutableRequired(true);
+        });
+    }
+
+    /**
+     * Cria uma URI segura para a câmera salvar a foto em alta resolução.
+     */
+    private Uri createImageUri() {
+        File imagePath = new File(requireContext().getCacheDir(), "images");
+        if (!imagePath.exists()) imagePath.mkdirs();
+
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+        File newFile = new File(imagePath, "IMG_" + timeStamp + ".jpg");
+
+        return FileProvider.getUriForFile(requireContext(), requireContext().getPackageName() + ".provider", newFile);
+    }
+
     private void setupLaunchers() {
         permissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
             if (isGranted) openCamera();
@@ -205,16 +226,17 @@ public class ScanFragment extends Fragment {
         });
 
         cameraLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-            // Usa requireActivity() para getResultCode
-            if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
-                Bundle extras = result.getData().getExtras();
-                if (extras != null) {
-                    Bitmap imageBitmap = (Bitmap) extras.get("data");
-                    if (imageBitmap != null) {
-                        bitmapToAnalyze = imageBitmap;
+            if (result.getResultCode() == android.app.Activity.RESULT_OK) {
+                if (cameraImageUri != null) {
+                    try {
+                        bitmapToAnalyze = loadBitmapFromUri(cameraImageUri);
+                        imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
                         imageView.setImageBitmap(bitmapToAnalyze);
                         textViewResult.setText("Imagem carregada. Clique em 'Analisar'.");
                         buttonAnalyze.setEnabled(true);
+                    } catch (IOException e) {
+                        Log.e(TAG, "Erro ao carregar imagem da câmera (Uri).", e);
+                        textViewResult.setText("Erro ao carregar foto.");
                     }
                 }
             }
@@ -225,9 +247,8 @@ public class ScanFragment extends Fragment {
                 Uri imageUri = result.getData().getData();
                 if (imageUri != null) {
                     try {
-                        // Precisa do contexto para getContentResolver
-                        Bitmap bitmap = MediaStore.Images.Media.getBitmap(requireContext().getContentResolver(), imageUri);
-                        bitmapToAnalyze = bitmap;
+                        bitmapToAnalyze = loadBitmapFromUri(imageUri);
+                        imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
                         imageView.setImageBitmap(bitmapToAnalyze);
                         textViewResult.setText("Imagem carregada. Clique em 'Analisar'.");
                         buttonAnalyze.setEnabled(true);
@@ -241,7 +262,6 @@ public class ScanFragment extends Fragment {
     }
 
     private void checkCameraPermissionAndOpenCamera() {
-        // Precisa do contexto para checkSelfPermission
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             openCamera();
         } else {
@@ -250,7 +270,9 @@ public class ScanFragment extends Fragment {
     }
 
     private void openCamera() {
+        cameraImageUri = createImageUri();
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
         cameraLauncher.launch(takePictureIntent);
     }
 
@@ -282,7 +304,6 @@ public class ScanFragment extends Fragment {
         }
 
         List<Detection> detections = postProcessYolo(outputArray[0], bitmap.getWidth(), bitmap.getHeight());
-
         displayDetectionResult(detections, bitmap);
     }
 
@@ -367,33 +388,29 @@ public class ScanFragment extends Fragment {
         Detection bestDetection = detections.get(0);
         DisposalDetails details = getDisposalDetails(bestDetection.label);
         textViewResult.setText("Resultado encontrado para: " + details.objectName);
+        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
         drawDetectionBox(originalBitmap, bestDetection);
+
         showResultDialog(details);
     }
 
     private void showResultDialog(DisposalDetails details) {
-        // Precisa do contexto para o Inflater e o Builder
         LayoutInflater inflater = LayoutInflater.from(requireContext());
         View dialogView = inflater.inflate(R.layout.dialog_result_layout, null);
-
         TextView textMaterialName = dialogView.findViewById(R.id.textMaterialName);
         TextView textBinName = dialogView.findViewById(R.id.textBinName);
         TextView textBinType = dialogView.findViewById(R.id.textBinType);
         View viewBinColor = dialogView.findViewById(R.id.viewBinColor);
-
         textMaterialName.setText(details.objectName);
         textBinName.setText(details.binName);
         textBinType.setText(details.binDescription);
         viewBinColor.setBackgroundColor(ContextCompat.getColor(requireContext(), details.binColorRes));
-
-        // Precisa do contexto para o Builder
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
         builder.setView(dialogView);
         builder.setPositiveButton("Fechar", (dialog, which) -> {
             dialog.dismiss();
             textViewResult.setText("Pronto para nova análise.");
         });
-
         AlertDialog dialog = builder.create();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -401,7 +418,6 @@ public class ScanFragment extends Fragment {
         dialog.show();
     }
 
-    // (Igual)
     private DisposalDetails getDisposalDetails(String label) {
         switch (label.toLowerCase(Locale.ROOT)) {
             case "plastic": return new DisposalDetails("Plástico", "Lixeira Vermelha", "Lixo Reciclável", R.color.lixeira_vermelho);
@@ -414,7 +430,6 @@ public class ScanFragment extends Fragment {
         }
     }
 
-    // (Igual)
     private void drawDetectionBox(Bitmap originalBitmap, Detection bestDetection) {
         Bitmap mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true);
         Canvas canvas = new Canvas(mutableBitmap);
@@ -432,7 +447,6 @@ public class ScanFragment extends Fragment {
         imageView.setImageBitmap(mutableBitmap);
     }
 
-    // (Igual)
     @Override
     public void onDestroy() {
         super.onDestroy();
