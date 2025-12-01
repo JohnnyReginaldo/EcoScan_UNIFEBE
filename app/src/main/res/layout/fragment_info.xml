@@ -13,7 +13,7 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Título Principal da Página (Mantido em Branco) -->
+
         <TextView
             android:id="@+id/textViewTitle"
             android:layout_width="match_parent"
@@ -25,7 +25,7 @@
             android:textSize="24sp"
             android:textStyle="bold" />
 
-        <!-- Card 1: Recicláveis (Lixo Seco) -->
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -40,7 +40,7 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <!-- Título do Card (Cor de destaque mantida) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -49,7 +49,7 @@
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -59,7 +59,7 @@
                     android:textSize="17sp"
                     android:textStyle="bold"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -68,7 +68,7 @@
                     android:textColor="@color/cinza_texto"
                     android:textSize="16sp" />
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -78,7 +78,7 @@
                     android:textColor="@color/cinza_texto"
                     android:textSize="17sp"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -89,7 +89,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Card 2: Orgânicos (Lixo Molhado) -->
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -104,7 +104,7 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <!-- Título do Card (Cor de destaque mantida) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -113,7 +113,7 @@
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -123,7 +123,7 @@
                     android:textSize="17sp"
                     android:textStyle="bold"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -133,7 +133,7 @@
                     android:textColor="@color/cinza_texto"
                     android:textSize="17sp"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -144,7 +144,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Card 3: Rejeitos (Lixo Comum) -->
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -159,7 +159,7 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <!-- Título do Card (Cor de destaque mantida) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -168,7 +168,7 @@
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -178,7 +178,7 @@
                     android:textSize="17sp"
                     android:textStyle="bold"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -190,7 +190,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Card 4: Descarte Especial (Perigosos) -->
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -205,7 +205,7 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <!-- Título do Card (Cor de destaque mantida) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -214,7 +214,7 @@
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -224,7 +224,7 @@
                     android:textSize="17sp"
                     android:textStyle="bold"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -234,7 +234,7 @@
                     android:textColor="@color/cinza_texto"
                     android:textSize="17sp"/>
 
-                <!-- MODIFICADO: Cor do texto suavizada (cinza escuro) -->
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

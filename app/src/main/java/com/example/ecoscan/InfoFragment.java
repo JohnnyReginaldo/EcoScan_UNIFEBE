@@ -13,7 +13,6 @@ public class InfoFragment extends Fragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // Infla o layout para este fragment (Correto!)
         return inflater.inflate(R.layout.fragment_info, container, false);
     }
 }

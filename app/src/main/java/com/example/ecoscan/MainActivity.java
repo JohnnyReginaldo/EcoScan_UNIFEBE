@@ -16,7 +16,6 @@ public class MainActivity extends AppCompatActivity {
 
     private BottomNavigationView bottomNavigationView;
 
-    // Nossos 3 fragments
     private final Fragment scanFragment = new ScanFragment();
     private final Fragment infoFragment = new InfoFragment();
     private final Fragment settingsFragment = new SettingsFragment();
@@ -28,11 +27,9 @@ public class MainActivity extends AppCompatActivity {
 
         bottomNavigationView = findViewById(R.id.bottom_navigation);
 
-        // Define o listener para cliques nos itens
         bottomNavigationView.setOnItemSelectedListener(new NavigationBarView.OnItemSelectedListener() {
             @Override
             public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                // Seleciona o fragment com base no item clicado
                 if (item.getItemId() == R.id.nav_info) {
                     loadFragment(infoFragment);
                     return true;
@@ -47,7 +44,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Carrega o fragment principal (ScanFragment) por padrão
         if (savedInstanceState == null) {
             bottomNavigationView.setSelectedItemId(R.id.nav_scan);
             loadFragment(scanFragment);
@@ -59,13 +55,8 @@ public class MainActivity extends AppCompatActivity {
         FragmentManager fragmentManager = getSupportFragmentManager();
         FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
 
-        // Substitui o conteúdo do 'fragment_container' pelo novo fragment
         fragmentTransaction.replace(R.id.fragment_container, fragment);
 
-        // Adiciona a transação à pilha de "voltar" (opcional, mas bom)
-        // fragmentTransaction.addToBackStack(null);
-
-        // Executa a transação
         fragmentTransaction.commit();
     }
 }

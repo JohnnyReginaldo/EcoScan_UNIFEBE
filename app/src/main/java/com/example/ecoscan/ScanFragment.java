@@ -80,7 +80,6 @@ public class ScanFragment extends Fragment {
 
     private ImageProcessor imageProcessor;
 
-    // Launchers
     private ActivityResultLauncher<Intent> cameraLauncher;
     private ActivityResultLauncher<Intent> galleryLauncher;
     private ActivityResultLauncher<String> permissionLauncher;
@@ -88,7 +87,6 @@ public class ScanFragment extends Fragment {
     private Bitmap bitmapToAnalyze;
     private Uri cameraImageUri;
 
-    // Classe interna (exatamente como era)
     private static class DisposalDetails {
         String objectName;
         String binName;
@@ -103,7 +101,6 @@ public class ScanFragment extends Fragment {
         }
     }
 
-    // --- Métodos de Ciclo de Vida do Fragment ---
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -141,7 +138,6 @@ public class ScanFragment extends Fragment {
         buttonAnalyze.setEnabled(false);
     }
 
-    // --- Restante do seu código (copiado 1:1, com ajustes de CONTEXTO) ---
 
     private void analyzeImage() {
         if (bitmapToAnalyze != null) {
@@ -185,30 +181,18 @@ public class ScanFragment extends Fragment {
                 .build();
     }
 
-    // --- MODIFICADO: Carregamento de Imagem em Alta Resolução ---
 
-    /**
-     * Carrega um Bitmap de uma Uri.
-     * *** CORRIGIDO PARA EVITAR CRASH DE HARDWARE BITMAP ***
-     */
     private Bitmap loadBitmapFromUri(Uri uri) throws IOException {
         ContentResolver resolver = requireContext().getContentResolver();
         ImageDecoder.Source source = ImageDecoder.createSource(resolver, uri);
 
-        // Esta é a correção:
         return ImageDecoder.decodeBitmap(source, (decoder, info, s) -> {
-            // Força o bitmap a ser alocado na memória de "software" (RAM)
-            // Isso impede o crash do TFLite e do Canvas.
             decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
 
-            // Pede que o bitmap seja mutável (bom para desenhar)
             decoder.setMutableRequired(true);
         });
     }
 
-    /**
-     * Cria uma URI segura para a câmera salvar a foto em alta resolução.
-     */
     private Uri createImageUri() {
         File imagePath = new File(requireContext().getCacheDir(), "images");
         if (!imagePath.exists()) imagePath.mkdirs();
@@ -281,8 +265,6 @@ public class ScanFragment extends Fragment {
         galleryLauncher.launch(pickIntent);
     }
 
-    // --- Métodos de Detecção (iguais) ---
-
     private void detectObjects(Bitmap bitmap) {
         if (interpreter == null || labels.isEmpty()) {
             Toast.makeText(requireContext(), "Detector não foi inicializado.", Toast.LENGTH_SHORT).show();
@@ -307,7 +289,6 @@ public class ScanFragment extends Fragment {
         displayDetectionResult(detections, bitmap);
     }
 
-    // Classe interna (igual)
     private static class Detection {
         RectF boundingBox;
         String label;
@@ -319,7 +300,6 @@ public class ScanFragment extends Fragment {
         }
     }
 
-    // postProcessYolo, nonMaxSuppression, calculateIoU (iguais)
     private List<Detection> postProcessYolo(float[][] output, int originalWidth, int originalHeight) {
         float[][] transposedOutput = new float[outputNumProposals][4 + outputNumClasses];
         for (int i = 0; i < 4 + outputNumClasses; i++) {
@@ -376,8 +356,6 @@ public class ScanFragment extends Fragment {
         float unionArea = (boxAArea + boxBArea - interArea);
         return interArea / unionArea;
     }
-
-    // --- Métodos de Resultado (com ajuste de CONTEXTO) ---
 
     private void displayDetectionResult(List<Detection> detections, Bitmap originalBitmap) {
         if (detections.isEmpty()) {

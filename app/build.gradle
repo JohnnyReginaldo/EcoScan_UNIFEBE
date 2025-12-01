@@ -15,9 +15,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
-    // ESSA PARTE É CRÍTICA!
-    // Garante que o Android Studio não comprima seu modelo .tflite,
-    // o que o corromperia.
+
     aaptOptions {
         noCompress 'tflite'
     }
@@ -39,7 +37,7 @@ android {
 
 dependencies {
 
-// Dependências do TensorFlow Lite para detecção de objetos
+
     implementation 'org.tensorflow:tensorflow-lite:2.9.0'
     implementation 'org.tensorflow:tensorflow-lite-support:0.4.0'
 
@@ -47,7 +45,7 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
-// Para ajudar com o design (cantos arredondados, etc)
+
     implementation 'com.google.android.material:material:1.10.0'
 
     implementation libs.appcompat
